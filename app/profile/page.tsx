@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { ProfileForm } from "@/lib/types";
+import RegisterPasskeyButton from "../components/RegisterPasskeyButton";
 
 export default function Profile() {
   const [form, setForm] = useState<ProfileForm>({
@@ -20,6 +21,7 @@ export default function Profile() {
     signature: "",
   });
 
+  const [original, setOriginal] = useState<ProfileForm | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { loading: authLoading, user } = useAuth();
@@ -27,47 +29,49 @@ export default function Profile() {
   useEffect(() => {
     fetch("/api/profile")
       .then((res) => res.json())
-      .then((data: Partial<ProfileForm>) =>
-        setForm((prev) => ({ ...prev, ...data }))
-      )
+      .then((data: Partial<ProfileForm>) => {
+        const merged = { ...form, ...data };
+        setForm(merged);
+        setOriginal(merged);
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  const update = <K extends keyof ProfileForm>(
-    field: K,
-    value: ProfileForm[K]
-  ) => {
+  const update = <K extends keyof ProfileForm>(field: K, value: ProfileForm[K]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  const hasChanges = JSON.stringify(form) !== JSON.stringify(original);
 
   const save = async () => {
     try {
       setSaving(true);
 
-      await fetch("/api/profile", {
+      const res = await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
 
+      if (!res.ok) throw new Error();
+
       toast.success("Profile updated");
+      setOriginal(form);
     } catch {
-      toast.error("Failed to save");
+      toast.error("Failed to save profile");
     } finally {
       setSaving(false);
     }
   };
 
   if (loading || authLoading)
-    return <div className="p-10 text-center">Loading profile...</div>;
+    return <div className="p-10 text-center text-gray-500">Loading profile...</div>;
 
   if (!user)
     return (
       <div className="p-10 text-center">
         <h2 className="text-2xl font-bold">Not Authorized</h2>
-        <p className="text-gray-500 mt-2">
-          Please login to access profile.
-        </p>
+        <p className="text-gray-500 mt-2">Please login to access profile.</p>
       </div>
     );
 
@@ -76,11 +80,9 @@ export default function Profile() {
 
       {/* HEADER */}
       <div>
-        <h1 className="text-3xl font-bold text-blue-700">
-          Business Profile
-        </h1>
+        <h1 className="text-3xl font-bold text-blue-700">Business Profile</h1>
         <p className="text-gray-500 text-sm mt-1">
-          These details will appear on invoices
+          These details appear on invoices
         </p>
       </div>
 
@@ -107,27 +109,45 @@ export default function Profile() {
         <ImageInput label="Signature URL" value={form.signature} onChange={(v)=>update("signature",v)} />
       </Section>
 
+      {/* PASSKEY SECTION */}
+      <div className="bg-white border rounded-2xl p-6 shadow-sm flex items-center justify-between">
+        <div>
+          <p className="font-semibold">Passkeys</p>
+          <p className="text-sm text-gray-500">
+            {user.credentials?.length || 0} registered device(s)
+          </p>
+        </div>
+
+        <RegisterPasskeyButton />
+      </div>
+
       {/* SAVE BAR */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 backdrop-blur">
         <div className="max-w-5xl mx-auto">
           <button
             onClick={save}
-            disabled={saving}
-            className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold active:scale-95 transition"
+            disabled={!hasChanges || saving}
+            className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold transition
+            disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
           >
-            {saving ? "Saving..." : "Save Profile"}
+            {saving ? "Saving..." : hasChanges ? "Save Changes" : "No Changes"}
           </button>
         </div>
       </div>
+
     </div>
   );
 }
 
-/* ---------- TYPES ---------- */
+/* ---------- UI ---------- */
 
-interface SectionProps {
-  title: string;
-  children: React.ReactNode;
+function Section({ title, children }: any) {
+  return (
+    <div className="bg-white border rounded-2xl p-6 space-y-4 shadow-sm">
+      <h2 className="font-semibold text-blue-700">{title}</h2>
+      <div className="grid md:grid-cols-2 gap-4">{children}</div>
+    </div>
+  );
 }
 
 interface InputProps {
@@ -136,34 +156,24 @@ interface InputProps {
   onChange: (v: string) => void;
 }
 
-interface TextareaProps extends InputProps {}
-
-interface ImageInputProps extends InputProps {}
-
-/* ---------- UI COMPONENTS ---------- */
-
-function Section({ title, children }: SectionProps) {
-  return (
-    <div className="bg-white border rounded-2xl p-6 space-y-4 shadow-sm">
-      <h2 className="font-semibold text-blue-700">{title}</h2>
-      <div className="grid md:grid-cols-2 gap-4">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 function Input({ label, value, onChange }: InputProps) {
   return (
     <div className="space-y-1">
       <label className="text-sm text-gray-600">{label}</label>
       <input
         value={value}
-        onChange={(e)=>onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
       />
     </div>
   );
+}
+
+
+interface TextareaProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
 }
 
 function Textarea({ label, value, onChange }: TextareaProps) {
@@ -172,11 +182,18 @@ function Textarea({ label, value, onChange }: TextareaProps) {
       <label className="text-sm text-gray-600">{label}</label>
       <textarea
         value={value}
-        onChange={(e)=>onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
       />
     </div>
   );
+}
+
+
+interface ImageInputProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
 }
 
 function ImageInput({ label, value, onChange }: ImageInputProps) {
@@ -186,7 +203,7 @@ function ImageInput({ label, value, onChange }: ImageInputProps) {
 
       <input
         value={value}
-        onChange={(e)=>onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
       />
 
@@ -200,3 +217,4 @@ function ImageInput({ label, value, onChange }: ImageInputProps) {
     </div>
   );
 }
+

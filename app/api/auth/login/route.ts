@@ -17,11 +17,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const user = await User.findOne({ email });
+    const normalized = email.toLowerCase().trim();
+
+    const user = await User.findOne({ email: normalized });
 
     if (!user) {
       return NextResponse.json(
         { error: "User not found" },
+        { status: 401 }
+      );
+    }
+
+    if (!user.password) {
+      return NextResponse.json(
+        { error: "Password login not available" },
         { status: 401 }
       );
     }

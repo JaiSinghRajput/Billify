@@ -4,9 +4,13 @@ import { AuthProvider } from "./contexts/AuthContext";
 import "./globals.css";
 import { Toaster } from "sonner";
 export const metadata = {
-  title: "Billify SaaS",
+  title: {
+    default: "Billify SaaS",
+    template: "%s | Billify SaaS",
+  },
   description: "Simple Billing for Businesses",
 };
+
 
 export default function RootLayout({
   children,

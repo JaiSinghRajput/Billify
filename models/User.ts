@@ -1,42 +1,47 @@
 import mongoose from "mongoose";
 
+const CredentialSchema = new mongoose.Schema({
+  credentialID: { type: Buffer, required: true },
+  publicKey: { type: Buffer, required: true },
+  counter: { type: Number, required: true },
+
+  transports: [String],
+  credentialDeviceType: String,
+  credentialBackedUp: Boolean,
+}, { _id: false });
+
 const UserSchema = new mongoose.Schema(
-  {
-    email: { type: String, unique: true, required: true },
-    password: String,
+{
+  email: { type: String, unique: true, required: true },
 
-    // ===== BUSINESS / VENDOR DETAILS =====
-    businessName: String,
-    ownerName: String,
-    gstNo: String,
-    phone: String,
-    address: String,
-    city: String,
-    state: String,
-    pincode: String,
+  // optional if hybrid login
+  password: String,
 
-    // branding
-    logo: String,
-    signature: String,
+  // ===== BUSINESS =====
+  businessName: String,
+  ownerName: String,
+  gstNo: String,
+  phone: String,
+  address: String,
+  city: String,
+  state: String,
+  pincode: String,
 
-    // optional billing info
-    bankName: String,
-    accountNumber: String,
-    ifscCode: String,
-    upiId: String,
+  logo: String,
+  signature: String,
 
-    // ===== AUTH =====
-    currentChallenge: String,
+  bankName: String,
+  accountNumber: String,
+  ifscCode: String,
+  upiId: String,
 
-    credentials: [
-      {
-        credentialID: String,
-        publicKey: String,
-        counter: Number,
-      },
-    ],
-  },
-  { timestamps: true }
+  // ===== WEBAUTHN =====
+  currentChallenge: String,
+  challengeExpires: Date,
+
+  credentials: [CredentialSchema],
+},
+{ timestamps: true }
 );
 
 export default mongoose.models.User ||

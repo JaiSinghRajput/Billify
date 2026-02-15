@@ -1,139 +1,211 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { useAuth } from "../contexts/AuthContext";
+import { useEffect, useState } from "react";
+import { startAuthentication } from "@simplewebauthn/browser";
 
-export default function Login() {
-  const router = useRouter();
-
-  const { user, loading: authLoading, refreshUser } = useAuth();
-
+export default function LoginPage() {
+  const [step, setStep] = useState<"email" | "auth">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [options, setOptions] = useState<any>(null);
+
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // ✅ redirect if already logged in
+  /* ---------------- AUTO SESSION CHECK ---------------- */
+
   useEffect(() => {
-    if (!authLoading && user) {
-      router.push("/dashboard");
-    }
-  }, [user, authLoading, router]);
+    fetch("/api/auth/me").then(res=>{
+      if(res.ok) window.location.href="/dashboard";
+    });
+  }, []);
 
-  const login = async () => {
-    if (!email || !password) {
-      toast.error("Please fill all fields");
-      return;
-    }
+  /* ---------------- CHECK USER ---------------- */
+
+  const checkUser = async () => {
+    setLoading(true);
+    setError("");
 
     try {
-      setLoading(true);
+      const normalized = email.toLowerCase().trim();
 
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/webauthn/login-options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalized }),
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error || "Login failed");
+      if (res.status === 404) {
+        setError("Account not found");
+        setLoading(false);
         return;
       }
 
-      // ✅ update global auth state
-      await refreshUser();
+      if (!res.ok) {
+        setError("Unable to continue");
+        setLoading(false);
+        return;
+      }
 
-      toast.success("Login successful 🎉");
+      const opts = await res.json();
+      const hasPasskeys = Boolean(opts?.hasPasskeys);
+      setOptions(opts);
+      setStep("auth");
 
-      router.push("/dashboard");
+      /* AUTO TRIGGER PASSKEY */
+      if (hasPasskeys && opts.allowCredentials?.length) {
+        await handlePasskeyLogin(opts, normalized);
+      }
+
     } catch {
-      toast.error("Something went wrong");
-    } finally {
-      setLoading(false);
+      setError("Something went wrong");
     }
+
+    setLoading(false);
   };
 
-  // optional loading UI while checking auth
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        Checking session...
-      </div>
-    );
-  }
+  /* ---------------- PASSKEY LOGIN ---------------- */
+
+  const handlePasskeyLogin = async (opts:any, emailValue:string) => {
+    try {
+      setLoading(true);
+
+      const credential = await startAuthentication(opts);
+
+      const verify = await fetch("/api/webauthn/login-verify", {
+        method: "POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          email: emailValue,
+          credential
+        }),
+      });
+
+      const result = await verify.json();
+
+      if (result.verified) {
+        window.location.href="/dashboard";
+        return;
+      }
+
+      setError("Passkey login failed");
+
+    } catch {
+      setError("Passkey cancelled");
+    }
+
+    setLoading(false);
+  };
+
+  /* ---------------- PASSWORD LOGIN ---------------- */
+
+  const loginPassword = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers:{ "Content-Type":"application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email: email.toLowerCase().trim(),
+          password
+        }),
+      });
+
+      if (res.ok) {
+        window.location.href="/dashboard";
+        return;
+      }
+
+      setError("Invalid email or password");
+
+    } catch {
+      setError("Login failed");
+    }
+
+    setLoading(false);
+  };
+
+  /* ---------------- UI ---------------- */
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50 px-4">
-      {/* Card */}
-      <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-sm p-8">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h2 className="text-2xl font-bold text-gray-900">
-            Welcome back
-          </h2>
-          <p className="text-gray-600 text-sm mt-2">
-            Login to your Billify account
-          </p>
-        </div>
+    <div className="h-screen flex items-center justify-center bg-gray-50">
 
-        {/* Form */}
-        <div
-          className="space-y-4"
-          onKeyDown={(e) => e.key === "Enter" && login()}
-        >
-          {/* Email */}
-          <div>
-            <label className="text-sm font-medium text-gray-700">
-              Email
-            </label>
+      <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md space-y-6">
+
+        <h1 className="text-2xl font-bold text-center">Sign in</h1>
+
+        {/* EMAIL STEP */}
+        {step === "email" && (
+          <>
             <input
-              type="email"
-              placeholder="you@example.com"
-              className="mt-1 w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none"
+              placeholder="Email address"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e)=>setEmail(e.target.value)}
+              className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
             />
-          </div>
 
-          {/* Password */}
-          <div>
-            <label className="text-sm font-medium text-gray-700">
-              Password
-            </label>
+            <button
+              onClick={checkUser}
+              disabled={!email || loading}
+              className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold disabled:opacity-50"
+            >
+              {loading ? "Checking..." : "Continue"}
+            </button>
+          </>
+        )}
 
+        {/* AUTH STEP */}
+        {step === "auth" && (
+          <>
+            {/* PASSKEY BUTTON */}
+            {options?.hasPasskeys && options?.allowCredentials?.length > 0 && (
+              <button
+                onClick={()=>handlePasskeyLogin(options,email)}
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-black text-white font-semibold"
+              >
+                {loading ? "Authenticating..." : "Login with Passkey"}
+              </button>
+            )}
+
+            {/* divider */}
+            {options?.hasPasskeys && options?.allowCredentials?.length > 0 && (
+              <div className="text-center text-sm text-gray-400">or</div>
+            )}
+
+            {/* PASSWORD */}
             <input
               type="password"
-              placeholder="Enter your password"
-              className="mt-1 w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none"
+              placeholder="Password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e)=>setPassword(e.target.value)}
+              className="w-full border rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
             />
-          </div>
 
-          {/* Button */}
-          <button
-            onClick={login}
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 rounded-lg font-medium"
-          >
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </div>
+            <button
+              onClick={loginPassword}
+              disabled={!password || loading}
+              className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold disabled:opacity-50"
+            >
+              {loading ? "Signing in..." : "Login with Password"}
+            </button>
 
-        {/* Footer */}
-        <p className="text-sm text-center text-gray-600 mt-6">
-          Don’t have an account?{" "}
-          <a
-            href="/signup"
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
-            Sign up
-          </a>
-        </p>
+            <button
+              onClick={()=>setStep("email")}
+              className="text-sm text-gray-400 hover:text-gray-600 w-full"
+            >
+              ← change email
+            </button>
+          </>
+        )}
+
+        {error && (
+          <p className="text-red-500 text-sm text-center">{error}</p>
+        )}
+
       </div>
     </div>
   );

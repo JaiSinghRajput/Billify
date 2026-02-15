@@ -2,10 +2,16 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 
-type User = {
+export type User = {
   id: string;
   email: string;
-} | null;
+  credentials?: {
+    credentialID: string;
+    publicKey: string;
+    counter: number;
+  }[];
+}| null;
+
 
 type AuthContextType = {
   user: User;

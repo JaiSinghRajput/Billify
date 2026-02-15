@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { startRegistration } from "@simplewebauthn/browser";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
@@ -14,7 +13,6 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   // ✅ redirect if already logged in
   useEffect(() => {
@@ -73,41 +71,6 @@ export default function Signup() {
     }
   };
 
-  // ===== PASSKEY REGISTRATION =====
-  const registerPasskey = async () => {
-    if (!email) {
-      toast.error("Enter email first");
-      return;
-    }
-
-    try {
-      setPasskeyLoading(true);
-
-      const options = await fetch("/api/webauthn/register-options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      }).then((res) => res.json());
-
-      const credential = await startRegistration(options);
-
-      const verification = await fetch("/api/webauthn/register-verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, credential }),
-      }).then((res) => res.json());
-
-      if (verification.verified) {
-        toast.success("Passkey registered 🔐");
-      } else {
-        toast.error("Passkey registration failed");
-      }
-    } catch {
-      toast.error("Passkey setup failed");
-    } finally {
-      setPasskeyLoading(false);
-    }
-  };
 
   if (authLoading) {
     return (
@@ -166,20 +129,6 @@ export default function Signup() {
             {loading ? "Creating account..." : "Create Account"}
           </button>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-4">
-            <div className="h-px bg-gray-200 flex-1" />
-            <span className="text-xs text-gray-500">OR</span>
-            <div className="h-px bg-gray-200 flex-1" />
-          </div>
-
-          <button
-            onClick={registerPasskey}
-            disabled={passkeyLoading}
-            className="w-full border border-gray-900 text-gray-900 hover:bg-gray-900 hover:text-white py-3 rounded-lg font-medium"
-          >
-            {passkeyLoading ? "Setting up passkey..." : "Register Passkey"}
-          </button>
         </div>
 
         <p className="text-sm text-center text-gray-600 mt-6">

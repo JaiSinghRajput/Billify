@@ -29,13 +29,12 @@ export default async function BillPage({
   }
 
   const { bill, vendor } = data;
-  console.log(bill, vendor);
   const date = new Date().toLocaleDateString();
 
   return (
     <div className="bg-gray-100 print:bg-white min-h-screen print:min-h-0 py-10 print:py-0">
 
-      <PrintButton />
+      <PrintButton  title={`Invoice #${bill.clientName}`} />
 
       {/* ===== INVOICE PAGE ===== */}
       <div
