@@ -1,15 +1,7 @@
+import { connectDB } from "@/lib/mongodb";
+import Bill from "@/models/Bill";
 import PrintButton from "@/app/components/PrintButton";
 import Link from "next/link";
-
-async function getBill(id: string) {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_URL}/api/bills/${id}`,
-    { cache: "no-store" }
-  );
-
-  if (!res.ok) return null;
-  return res.json();
-}
 
 export default async function BillPage({
   params,
@@ -17,9 +9,14 @@ export default async function BillPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getBill(id);
+  await connectDB();
 
-  if (!data) {
+  const bill = await Bill.findById(id).populate({
+    path: "userId",
+    select: "businessName address phone gstNo signature logo",
+  });
+
+  if (!bill) {
     return (
       <div className="p-10">
         <h1>Bill not found</h1>
@@ -28,7 +25,7 @@ export default async function BillPage({
     );
   }
 
-  const { bill, vendor } = data;
+  const vendor = bill.userId as any;
   const date = new Date().toLocaleDateString();
 
   return (
